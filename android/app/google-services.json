@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "999868479138",
+    "project_id": "vanity-tracker",
+    "storage_bucket": "vanity-tracker.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:999868479138:android:6f0f0f00cfc6ca5abec9fb",
+        "android_client_info": {
+          "package_name": "com.vanitytracker.vanity_tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAc5zVgaCK3CRcjsXeVTMPvJ6ToY4i7pXY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
