@@ -33,14 +33,10 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <!-- In-browser receipt OCR: self-hosted Tesseract.js 6.0.1 (web/tesseract/), no CDN needed -->
+  <script src="tesseract/tesseract.min.js"></script>
+  <script src="receipt_ocr.js"></script>
+  <script src="file_download.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

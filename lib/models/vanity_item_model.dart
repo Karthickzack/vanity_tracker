@@ -1,172 +1,178 @@
-import 'package:intl/intl.dart';
+import 'date_precision.dart';
+import 'product_model.dart';
+
+export 'date_precision.dart';
 
 enum VanityStatus {
   unopened,
   active,
-  expiring,
+  expiringSoon,
   expired,
-  finished;
-
-  static VanityStatus fromString(String? val) {
-    switch (val?.toLowerCase()) {
-      case 'unopened':
-        return VanityStatus.unopened;
-      case 'active':
-        return VanityStatus.active;
-      case 'expiring':
-      case 'expiring_soon':
-        return VanityStatus.expiring;
-      case 'expired':
-        return VanityStatus.expired;
-      case 'finished':
-        return VanityStatus.finished;
-      default:
-        return VanityStatus.unopened;
-    }
-  }
-
-  String get nameString {
-    switch (this) {
-      case VanityStatus.unopened:
-        return 'unopened';
-      case VanityStatus.active:
-        return 'active';
-      case VanityStatus.expiring:
-        return 'expiring';
-      case VanityStatus.expired:
-        return 'expired';
-      case VanityStatus.finished:
-        return 'finished';
-    }
-  }
+  finished,
 }
 
 class VanityItemModel {
   final String vanityItemId;
   final String productId;
   final String userId;
-  final String productName;
-  final String brand;
-  final String categoryId;
-  final int paoMonths;
-  final String? barcode;
-  final String? imageUrl;
-  final String? volume;
   final DateTime? openedDate;
   final DateTime? expiryDate;
-  final VanityStatus status;
+  final DateTime? sealedExpiryDate; // Factory sealed/batch expiration date
+  /// Whether [sealedExpiryDate] has a day or only a month ("EXP 10/2027").
+  final DatePrecision sealedExpiryPrecision;
+  final String status; // 'unopened', 'active', 'expiring', 'expired', 'finished'
   final double? price;
+
+  /// ISO 4217 code of [price] (stored as `price_currency`). Null on items saved before it
+  /// was recorded: the amount is kept as is and never assumed to be in any currency.
+  final String? priceCurrency;
   final DateTime? finishedDate;
   final bool? wouldRepurchase;
-  final DateTime createdAt;
+  final ProductModel? product;
+  final List<String> routineTags; // e.g. ['AM', 'PM', 'Weekly']
+  final String? notes;
+  final String? batchCode; // Confirmed product batch/lot code
+  final DateTime? manufacturingDate; // Stamped or decoded manufacturing date
+  final DatePrecision manufacturingDatePrecision;
+  final bool isSharedWithHousehold; // Explicit user opt-in to share with household
+  final String? sharedHouseholdId; // Household ID where this item is shared
 
   const VanityItemModel({
     required this.vanityItemId,
     required this.productId,
     required this.userId,
-    required this.productName,
-    required this.brand,
-    required this.categoryId,
-    required this.paoMonths,
-    this.barcode,
-    this.imageUrl,
-    this.volume,
     this.openedDate,
     this.expiryDate,
-    required this.status,
+    this.sealedExpiryDate,
+    this.sealedExpiryPrecision = DatePrecision.day,
+    this.manufacturingDatePrecision = DatePrecision.day,
+    this.status = 'unopened',
     this.price,
+    this.priceCurrency,
     this.finishedDate,
     this.wouldRepurchase,
-    required this.createdAt,
+    this.notes,
+    this.product,
+    this.routineTags = const [],
+    this.batchCode,
+    this.manufacturingDate,
+    this.isSharedWithHousehold = false,
+    this.sharedHouseholdId,
   });
 
-  /// Computed days until expiry from given reference date (default: now)
-  int? daysUntilExpiry([DateTime? referenceDate]) {
-    if (expiryDate == null) return null;
-    final now = referenceDate ?? DateTime.now();
+  /// Compute expiry date based on openedDate and paoMonths.
+  ///
+  /// Date rule: the same day of the month, [paoMonths] calendar months later. When that
+  /// month is shorter, the last day of the month is used (Jan 31 + 1 month = Feb 28, or
+  /// Feb 29 in a leap year; Feb 29 + 12 months = Feb 28).
+  static DateTime computeExpiryDate(DateTime openedDate, int paoMonths) {
+    // Exact month addition
+    final newYear = openedDate.year + ((openedDate.month + paoMonths - 1) ~/ 12);
+    final newMonth = ((openedDate.month + paoMonths - 1) % 12) + 1;
+    // Handle days overflow for shorter months
+    final lastDayOfNewMonth = DateTime(newYear, newMonth + 1, 0).day;
+    final newDay = openedDate.day > lastDayOfNewMonth ? lastDayOfNewMonth : openedDate.day;
+    return DateTime(newYear, newMonth, newDay, openedDate.hour, openedDate.minute);
+  }
+
+  /// PAO-based expiry, or null when the product is unopened or its PAO is unknown.
+  /// This is the single place PAO expiry is derived; never from the purchase date.
+  static DateTime? paoExpiryFor(DateTime? openedDate, ProductModel? product) {
+    final months = product?.knownPaoMonths;
+    if (openedDate == null || months == null) return null;
+    return computeExpiryDate(openedDate, months);
+  }
+
+  /// Copy with [expiryDate] and [status] derived again from the opening date and PAO.
+  /// The opening date, purchase data and sealed expiry are left unchanged.
+  VanityItemModel withRecalculatedExpiry() {
+    final expiry = paoExpiryFor(openedDate, product);
+    final recalculated = copyWith(expiryDate: expiry, clearExpiryDate: expiry == null);
+    if (recalculated.status == 'finished' || recalculated.finishedDate != null) return recalculated;
+    return recalculated.copyWith(status: recalculated.computedStatusString);
+  }
+
+  /// [computedStatus] in the string form stored in `status`.
+  String get computedStatusString => switch (computedStatus) {
+        VanityStatus.finished => 'finished',
+        VanityStatus.expired => 'expired',
+        VanityStatus.expiringSoon => 'expiring',
+        VanityStatus.active => 'active',
+        VanityStatus.unopened => 'unopened',
+      };
+
+  /// Effective expiry date: earlier of PAO expiry and factory sealed expiry
+  DateTime? get effectiveExpiryDate {
+    if (expiryDate != null && sealedExpiryDate != null) {
+      return expiryDate!.isBefore(sealedExpiryDate!) ? expiryDate : sealedExpiryDate;
+    }
+    return expiryDate ?? sealedExpiryDate;
+  }
+
+  /// Days remaining until expiry (negative if expired)
+  int? get daysUntilExpiry {
+    final effective = effectiveExpiryDate;
+    if (effective == null) return null;
+    final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final target = DateTime(expiryDate!.year, expiryDate!.month, expiryDate!.day);
-    return target.difference(today).inDays;
+    final expiryDay = DateTime(effective.year, effective.month, effective.day);
+    return expiryDay.difference(today).inDays;
   }
 
-  /// Computed status based on dates
-  VanityStatus get computedStatus {
-    if (finishedDate != null || status == VanityStatus.finished) {
-      return VanityStatus.finished;
-    }
-    if (openedDate == null || expiryDate == null) {
-      return VanityStatus.unopened;
-    }
-    final days = daysUntilExpiry();
-    if (days == null) return VanityStatus.unopened;
-    if (days < 0) return VanityStatus.expired;
-    if (days <= 30) return VanityStatus.expiring;
-    return VanityStatus.active;
-  }
-
-  /// Total days the product was in use (opened to finished, or opened to today)
-  int get daysInUse {
+  /// Days the product has been used
+  int get daysUsed {
     if (openedDate == null) return 0;
-    final endDate = finishedDate ?? DateTime.now();
-    final diff = endDate.difference(openedDate!).inDays;
-    return diff <= 0 ? 1 : diff;
+    final startDate = DateTime(openedDate!.year, openedDate!.month, openedDate!.day);
+    final endDate = finishedDate != null
+        ? DateTime(finishedDate!.year, finishedDate!.month, finishedDate!.day)
+        : DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final diff = endDate.difference(startDate).inDays;
+    return diff <= 0 ? 1 : diff; // Minimum 1 day
   }
 
-  /// Cost per day used (price / daysInUse)
+  /// Cost per day calculation (price / daysUsed)
   double? get costPerDay {
-    if (price == null || price! <= 0 || openedDate == null) return null;
-    final days = daysInUse;
+    if (price == null || price! <= 0) return null;
+    final days = daysUsed;
     if (days <= 0) return price;
     return price! / days;
   }
 
-  String get formattedOpenedDate =>
-      openedDate != null ? DateFormat.yMMMd().format(openedDate!) : 'Not opened yet';
+  /// Expiry progress from 0.0 (freshly opened) to 1.0 (expired)
+  double get expiryProgress {
+    final effective = effectiveExpiryDate;
+    if (openedDate == null || effective == null) return 0.0;
+    final totalDuration = effective.difference(openedDate!).inMilliseconds;
+    if (totalDuration <= 0) return 1.0;
+    final elapsed = DateTime.now().difference(openedDate!).inMilliseconds;
+    if (elapsed <= 0) return 0.0;
+    if (elapsed >= totalDuration) return 1.0;
+    return elapsed / totalDuration;
+  }
 
-  String get formattedExpiryDate =>
-      expiryDate != null ? DateFormat.yMMMd().format(expiryDate!) : 'N/A';
-
-  String get formattedFinishedDate =>
-      finishedDate != null ? DateFormat.yMMMd().format(finishedDate!) : 'N/A';
-
-  factory VanityItemModel.fromMap(Map<String, dynamic> map, String id) {
-    DateTime? parseDate(dynamic val) {
-      if (val == null) return null;
-      if (val is DateTime) return val;
-      if (val is String) return DateTime.tryParse(val);
-      // If Firestore Timestamp
-      if (val.runtimeType.toString().contains('Timestamp')) {
-        try {
-          return (val as dynamic).toDate();
-        } catch (_) {}
-      }
-      return null;
+  /// Evaluated status based on dates
+  VanityStatus get computedStatus {
+    if (finishedDate != null || status == 'finished') {
+      return VanityStatus.finished;
     }
-
-    final rawOpened = parseDate(map['opened_date']);
-    final rawExpiry = parseDate(map['expiry_date']);
-    final rawFinished = parseDate(map['finished_date']);
-    final rawCreated = parseDate(map['created_at']) ?? DateTime.now();
-
-    return VanityItemModel(
-      vanityItemId: id,
-      productId: map['product_id'] as String? ?? '',
-      userId: map['user_id'] as String? ?? '',
-      productName: map['name'] as String? ?? map['product_name'] as String? ?? 'Skincare Item',
-      brand: map['brand'] as String? ?? 'Brand',
-      categoryId: map['category_id'] as String? ?? 'serum',
-      paoMonths: (map['pao_months'] as num?)?.toInt() ?? 12,
-      barcode: map['barcode'] as String?,
-      imageUrl: map['image_url'] as String?,
-      volume: map['volume'] as String?,
-      openedDate: rawOpened,
-      expiryDate: rawExpiry,
-      status: VanityStatus.fromString(map['status'] as String?),
-      price: (map['price'] as num?)?.toDouble(),
-      finishedDate: rawFinished,
-      wouldRepurchase: map['would_repurchase'] as bool?,
-      createdAt: rawCreated,
-    );
+    if (openedDate == null) {
+      if (sealedExpiryDate != null) {
+        final days = daysUntilExpiry ?? 0;
+        if (days < 0) return VanityStatus.expired;
+        if (days <= 30) return VanityStatus.expiringSoon;
+      }
+      return VanityStatus.unopened;
+    }
+    // Opened but no expiry known (PAO unknown, no sealed date): in use, not "expiring".
+    if (effectiveExpiryDate == null) return VanityStatus.active;
+    final days = daysUntilExpiry ?? 0;
+    if (days < 0) {
+      return VanityStatus.expired;
+    } else if (days <= 30) {
+      return VanityStatus.expiringSoon;
+    } else {
+      return VanityStatus.active;
+    }
   }
 
   Map<String, dynamic> toMap() {
@@ -174,60 +180,112 @@ class VanityItemModel {
       'vanity_item_id': vanityItemId,
       'product_id': productId,
       'user_id': userId,
-      'name': productName,
-      'brand': brand,
-      'category_id': categoryId,
-      'pao_months': paoMonths,
-      if (barcode != null) 'barcode': barcode,
-      if (imageUrl != null) 'image_url': imageUrl,
-      if (volume != null) 'volume': volume,
-      if (openedDate != null) 'opened_date': openedDate!.toIso8601String(),
-      if (expiryDate != null) 'expiry_date': expiryDate!.toIso8601String(),
-      'status': computedStatus.nameString,
-      if (price != null) 'price': price,
-      if (finishedDate != null) 'finished_date': finishedDate!.toIso8601String(),
-      if (wouldRepurchase != null) 'would_repurchase': wouldRepurchase,
-      'created_at': createdAt.toIso8601String(),
+      'opened_date': openedDate?.toIso8601String(),
+      'expiry_date': expiryDate?.toIso8601String(),
+      'sealed_expiry_date': sealedExpiryDate?.toIso8601String(),
+      if (sealedExpiryDate != null && sealedExpiryPrecision == DatePrecision.month) 'sealed_expiry_precision': 'month',
+      'status': status,
+      'price': price,
+      if (priceCurrency != null) 'price_currency': priceCurrency,
+      'finished_date': finishedDate?.toIso8601String(),
+      'would_repurchase': wouldRepurchase,
+      'notes': notes,
+      'routine_tags': routineTags,
+      'batch_code': batchCode,
+      'manufacturing_date': manufacturingDate?.toIso8601String(),
+      if (manufacturingDate != null && manufacturingDatePrecision == DatePrecision.month)
+        'manufacturing_date_precision': 'month',
+      'is_shared_with_household': isSharedWithHousehold,
+      'shared_household_id': sharedHouseholdId,
+      if (product != null) 'product': product!.toMap(),
     };
+  }
+
+  factory VanityItemModel.fromMap(Map<String, dynamic> map, [String? id]) {
+    final openedStr = map['opened_date'];
+    final expiryStr = map['expiry_date'];
+    final sealedStr = map['sealed_expiry_date'];
+    final finishedStr = map['finished_date'];
+    final mfgStr = map['manufacturing_date'];
+    final tagsList = (map['routine_tags'] as List?)?.map((e) => e.toString()).toList() ??
+        (map['routineTags'] as List?)?.map((e) => e.toString()).toList() ??
+        const <String>[];
+
+    return VanityItemModel(
+      vanityItemId: id ?? map['vanity_item_id'] ?? '',
+      productId: map['product_id'] ?? '',
+      userId: map['user_id'] ?? '',
+      openedDate: openedStr != null ? DateTime.tryParse(openedStr) : null,
+      expiryDate: expiryStr != null ? DateTime.tryParse(expiryStr) : null,
+      sealedExpiryDate: sealedStr != null ? DateTime.tryParse(sealedStr) : null,
+      sealedExpiryPrecision: DatePrecision.fromStorage(map['sealed_expiry_precision']),
+      manufacturingDatePrecision: DatePrecision.fromStorage(map['manufacturing_date_precision']),
+      status: map['status'] ?? 'unopened',
+      price: (map['price'] as num?)?.toDouble(),
+      priceCurrency: map['price_currency'] as String?,
+      finishedDate: finishedStr != null ? DateTime.tryParse(finishedStr) : null,
+      wouldRepurchase: map['would_repurchase'] as bool?,
+      notes: map['notes'],
+      product: map['product'] != null ? ProductModel.fromMap(Map<String, dynamic>.from(map['product'])) : null,
+      routineTags: tagsList,
+      batchCode: map['batch_code'],
+      manufacturingDate: mfgStr != null ? DateTime.tryParse(mfgStr) : null,
+      isSharedWithHousehold: map['is_shared_with_household'] as bool? ?? false,
+      sharedHouseholdId: map['shared_household_id'] as String?,
+    );
   }
 
   VanityItemModel copyWith({
     String? vanityItemId,
     String? productId,
     String? userId,
-    String? productName,
-    String? brand,
-    String? categoryId,
-    int? paoMonths,
-    String? barcode,
-    String? imageUrl,
-    String? volume,
     DateTime? openedDate,
+    bool clearOpenedDate = false,
     DateTime? expiryDate,
-    VanityStatus? status,
+    bool clearExpiryDate = false,
+    DateTime? sealedExpiryDate,
+    bool clearSealedExpiryDate = false,
+    DatePrecision? sealedExpiryPrecision,
+    DatePrecision? manufacturingDatePrecision,
+    String? status,
     double? price,
+    String? priceCurrency,
     DateTime? finishedDate,
+    bool clearFinishedDate = false,
     bool? wouldRepurchase,
-    DateTime? createdAt,
+    bool clearRepurchase = false,
+    String? notes,
+    ProductModel? product,
+    List<String>? routineTags,
+    String? batchCode,
+    bool clearBatchCode = false,
+    DateTime? manufacturingDate,
+    bool clearManufacturingDate = false,
+    bool? isSharedWithHousehold,
+    String? sharedHouseholdId,
+    bool clearSharedHouseholdId = false,
   }) {
     return VanityItemModel(
       vanityItemId: vanityItemId ?? this.vanityItemId,
       productId: productId ?? this.productId,
       userId: userId ?? this.userId,
-      productName: productName ?? this.productName,
-      brand: brand ?? this.brand,
-      categoryId: categoryId ?? this.categoryId,
-      paoMonths: paoMonths ?? this.paoMonths,
-      barcode: barcode ?? this.barcode,
-      imageUrl: imageUrl ?? this.imageUrl,
-      volume: volume ?? this.volume,
-      openedDate: openedDate ?? this.openedDate,
-      expiryDate: expiryDate ?? this.expiryDate,
+      openedDate: clearOpenedDate ? null : (openedDate ?? this.openedDate),
+      expiryDate: clearExpiryDate ? null : (expiryDate ?? this.expiryDate),
+      sealedExpiryDate: clearSealedExpiryDate ? null : (sealedExpiryDate ?? this.sealedExpiryDate),
+      sealedExpiryPrecision: sealedExpiryPrecision ?? this.sealedExpiryPrecision,
+      manufacturingDatePrecision: manufacturingDatePrecision ?? this.manufacturingDatePrecision,
       status: status ?? this.status,
       price: price ?? this.price,
-      finishedDate: finishedDate ?? this.finishedDate,
-      wouldRepurchase: wouldRepurchase ?? this.wouldRepurchase,
-      createdAt: createdAt ?? this.createdAt,
+      priceCurrency: priceCurrency ?? this.priceCurrency,
+      finishedDate: clearFinishedDate ? null : (finishedDate ?? this.finishedDate),
+      wouldRepurchase: clearRepurchase ? null : (wouldRepurchase ?? this.wouldRepurchase),
+      notes: notes ?? this.notes,
+      product: product ?? this.product,
+      routineTags: routineTags ?? this.routineTags,
+      batchCode: clearBatchCode ? null : (batchCode ?? this.batchCode),
+      manufacturingDate: clearManufacturingDate ? null : (manufacturingDate ?? this.manufacturingDate),
+      isSharedWithHousehold: isSharedWithHousehold ?? this.isSharedWithHousehold,
+      sharedHouseholdId: clearSharedHouseholdId ? null : (sharedHouseholdId ?? this.sharedHouseholdId),
     );
   }
 }

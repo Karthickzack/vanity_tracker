@@ -1,32 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../core/constants/app_colors.dart';
 import '../../models/category_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/household_provider.dart';
+import '../../providers/receipt_provider.dart';
 import '../../providers/vanity_provider.dart';
-import '../../core/services/auth_service.dart';
-import '../add_product/add_product_screen.dart';
-import '../detail/product_detail_screen.dart';
-import '../history/history_screen.dart';
-import '../stats/stats_screen.dart';
-import 'widgets/vanity_item_card.dart';
+import '../../providers/wishlist_provider.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/category_chip.dart';
+import '../../widgets/opened_feedback.dart';
+import '../../widgets/repurchase_dialog.dart';
+import '../../widgets/vanity_item_card.dart';
+import '../backup/backup_restore_screen.dart';
+import '../guide/pao_guide_screen.dart';
+import '../household/household_screen.dart';
+import '../product/add_product_screen.dart';
+import '../product/product_detail_screen.dart';
+import '../receipt/receipt_history_screen.dart';
+import '../receipt/receipt_scanner_screen.dart';
+import '../wishlist/wishlist_screen.dart';
 
 class VanityDashboardScreen extends StatefulWidget {
-  final AuthService authService;
-  final VoidCallback onSignOut;
-
-  const VanityDashboardScreen({
-    super.key,
-    required this.authService,
-    required this.onSignOut,
-  });
+  const VanityDashboardScreen({super.key});
 
   @override
   State<VanityDashboardScreen> createState() => _VanityDashboardScreenState();
 }
 
 class _VanityDashboardScreenState extends State<VanityDashboardScreen> {
-  int _currentNavIndex = 0;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -35,162 +36,383 @@ class _VanityDashboardScreenState extends State<VanityDashboardScreen> {
     super.dispose();
   }
 
-  void _openAddProduct() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const AddProductScreen(),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final vanityProv = context.watch<VanityProvider>();
+    final wishlistProv = context.watch<WishlistProvider>();
+    final auth = context.watch<AuthProvider>();
+    final items = vanityProv.activeItems;
+    final userName = auth.currentUser?.name ?? 'Skincare Lover';
+
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'My Vanity',
-              style: GoogleFonts.cormorantGaramond(
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            Text(
-              'Freshness & PAO Inventory',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.bar_chart_rounded, color: AppColors.primaryDark),
-            tooltip: 'Vanity Analytics',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const StatsScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.history_rounded, color: AppColors.textPrimary),
-            tooltip: 'Empties History',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const HistoryScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, color: AppColors.textSecondary),
-            tooltip: 'Sign Out',
-            onPressed: () async {
-              await widget.authService.signOut();
-              widget.onSignOut();
-            },
-          ),
-        ],
-      ),
-      body: Consumer<VanityProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            );
-          }
-
-          final items = provider.activeItems;
-
-          return CustomScrollView(
-            slivers: [
-              // Summary Urgency Banner Cards
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: _buildSummaryCards(provider),
-                ),
-              ),
-
-              // Search Bar
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: provider.setSearchQuery,
-                    decoration: InputDecoration(
-                      hintText: 'Search by brand or product name...',
-                      prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 18),
-                              onPressed: () {
-                                _searchController.clear();
-                                provider.setSearchQuery('');
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      backgroundColor: const Color(0xFFFDFBF9),
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            // App Header
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hello, $userName ✨',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'My Vanity Shelf',
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.5,
+                            color: AppTheme.textDark,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert_rounded, color: AppTheme.textDark),
+                      tooltip: 'More options',
+                      onSelected: (value) async {
+                        if (value == 'wishlist') {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const WishlistScreen()),
+                          );
+                        } else if (value == 'receipt') {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const ReceiptScannerScreen()),
+                          );
+                        } else if (value == 'receipt_history') {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const ReceiptHistoryScreen()),
+                          );
+                        } else if (value == 'household') {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const HouseholdScreen()),
+                          );
+                        } else if (value == 'pao') {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const PaoGuideScreen()),
+                          );
+                        } else if (value == 'backup') {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const BackupRestoreScreen()),
+                          );
+                        } else if (value == 'signout') {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Sign Out'),
+                              content: const Text('Are you sure you want to sign out?'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.of(ctx).pop(true),
+                                  child: const Text('Sign Out'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true && context.mounted) {
+                            context.read<HouseholdProvider>().clear();
+                            context.read<VanityProvider>().clear();
+                            context.read<WishlistProvider>().clear();
+                            context.read<ReceiptProvider>().clear();
+                            await context.read<AuthProvider>().signOut();
+                          }
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        const PopupMenuItem(
+                          value: 'wishlist',
+                          child: Row(
+                            children: [
+                              Icon(Icons.favorite_rounded, size: 20, color: AppTheme.primaryRose),
+                              SizedBox(width: 12),
+                              Text('Wishlist', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'receipt',
+                          child: Row(
+                            children: [
+                              Icon(Icons.receipt_long_rounded, size: 20, color: Color(0xFF0D9488)),
+                              SizedBox(width: 12),
+                              Text('Scan Receipt', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'receipt_history',
+                          child: Row(
+                            children: [
+                              Icon(Icons.history_rounded, size: 20, color: Color(0xFF0D9488)),
+                              SizedBox(width: 12),
+                              Text('Receipt History', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'household',
+                          child: Row(
+                            children: [
+                              Icon(Icons.people_alt_rounded, size: 20, color: Color(0xFF7E22CE)),
+                              SizedBox(width: 12),
+                              Text('Household Sharing', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'pao',
+                          child: Row(
+                            children: [
+                              Icon(Icons.menu_book_rounded, size: 20, color: AppTheme.primaryRose),
+                              SizedBox(width: 12),
+                              Text('PAO Reference Guide', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'backup',
+                          child: Row(
+                            children: [
+                              Icon(Icons.import_export_rounded, size: 20, color: AppTheme.primaryRose),
+                              SizedBox(width: 12),
+                              Text('Backup & Restore', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: 'signout',
+                          child: Row(
+                            children: [
+                              Icon(Icons.logout_rounded, size: 20, color: AppTheme.textMuted),
+                              SizedBox(width: 12),
+                              Text('Sign Out', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
+            ),
 
-              // Category Filter Horizontal List
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 44,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: const Text('All Products'),
-                          selected: provider.selectedCategory == null,
-                          onSelected: (_) => provider.setSelectedCategory(null),
+            // Quick Actions Bar (Wishlist & Scan Receipt)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const WishlistScreen()),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFF1ECE8)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryRose.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.favorite_rounded, color: AppTheme.primaryRose, size: 18),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Wishlist', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textDark)),
+                                    Text(
+                                      '${wishlistProv.items.length} items',
+                                      style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right_rounded, size: 18, color: AppTheme.textMuted),
+                            ],
+                          ),
                         ),
                       ),
-                      ...CategoryModel.defaultCategories.map((cat) {
-                        final isSelected = provider.selectedCategory == cat.categoryId;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(cat.categoryName),
-                            selected: isSelected,
-                            onSelected: (_) {
-                              provider.setSelectedCategory(
-                                isSelected ? null : cat.categoryId,
-                              );
-                            },
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const ReceiptScannerScreen()),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFF1ECE8)),
                           ),
-                        );
-                      }),
-                    ],
-                  ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0D9488).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF0D9488), size: 18),
+                              ),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Scan Receipt', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textDark)),
+                                    Text('Log purchases · history', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right_rounded, size: 18, color: AppTheme.textMuted),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            // Expiry Quick Status Bar
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildQuickFilterCard(
+                        title: 'All Active',
+                        count: vanityProv.totalActiveCount.toString(),
+                        color: AppTheme.textDark,
+                        bgColor: Colors.white,
+                        isSelected: vanityProv.selectedStatusFilter == null || vanityProv.selectedStatusFilter == 'all',
+                        onTap: () => vanityProv.setStatusFilter('all'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildQuickFilterCard(
+                        title: 'Expiring',
+                        count: vanityProv.expiringSoonCount.toString(),
+                        color: AppTheme.statusAmber,
+                        bgColor: AppTheme.statusAmberBg,
+                        isSelected: vanityProv.selectedStatusFilter == 'expiring',
+                        onTap: () => vanityProv.setStatusFilter(vanityProv.selectedStatusFilter == 'expiring' ? 'all' : 'expiring'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildQuickFilterCard(
+                        title: 'Expired',
+                        count: vanityProv.expiredCount.toString(),
+                        color: AppTheme.statusRed,
+                        bgColor: AppTheme.statusRedBg,
+                        isSelected: vanityProv.selectedStatusFilter == 'expired',
+                        onTap: () => vanityProv.setStatusFilter(vanityProv.selectedStatusFilter == 'expired' ? 'all' : 'expired'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
-              // Product Cards List
-              if (items.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _buildEmptyState(context, provider),
-                )
-              else
-                SliverList(
+            // Search Bar
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search products, brands, ingredients...',
+                    prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textMuted),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              vanityProv.setSearchQuery('');
+                            },
+                          )
+                        : null,
+                    fillColor: Colors.white,
+                  ),
+                  onChanged: (val) => vanityProv.setSearchQuery(val),
+                ),
+              ),
+            ),
+
+            // Category Chips List
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 48,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  children: [
+                    CategoryChip(
+                      category: const CategoryModel(categoryId: 'all', categoryName: 'All Categories', defaultPaoMonths: 12),
+                      isSelected: vanityProv.selectedCategoryFilter == null || vanityProv.selectedCategoryFilter == 'all',
+                      onSelected: () => vanityProv.setCategoryFilter('all'),
+                    ),
+                    ...vanityProv.categories.map((cat) {
+                      return CategoryChip(
+                        category: cat,
+                        isSelected: vanityProv.selectedCategoryFilter == cat.categoryId,
+                        onSelected: () => vanityProv.setCategoryFilter(
+                          vanityProv.selectedCategoryFilter == cat.categoryId ? 'all' : cat.categoryId,
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+            // Products List or Empty State
+            if (items.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _buildEmptyState(context),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final item = items[index];
@@ -199,19 +421,18 @@ class _VanityDashboardScreenState extends State<VanityDashboardScreen> {
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => ProductDetailScreen(item: item),
+                              builder: (_) => ProductDetailScreen(vanityItemId: item.vanityItemId),
                             ),
                           );
                         },
-                        onMarkOpenedToday: () async {
-                          await provider.markAsOpened(item);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Opened today! Expiry set for ${item.formattedExpiryDate}'),
-                                backgroundColor: AppColors.secondary,
-                              ),
-                            );
+                        onMarkOpened: item.openedDate == null
+                            // One tap starts the PAO countdown, so the confirmation offers Undo.
+                            ? () => markOpenedWithFeedback(ScaffoldMessenger.of(context), vanityProv, item.vanityItemId)
+                            : null,
+                        onMarkFinished: () async {
+                          final repurchase = await RepurchaseDialog.show(context, item);
+                          if (repurchase != null && context.mounted) {
+                            await vanityProv.markAsFinished(item.vanityItemId, wouldRepurchase: repurchase);
                           }
                         },
                       );
@@ -219,156 +440,62 @@ class _VanityDashboardScreenState extends State<VanityDashboardScreen> {
                     childCount: items.length,
                   ),
                 ),
+              ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 80)),
-            ],
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddProduct,
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        icon: const Icon(Icons.add_rounded),
-        label: Text(
-          'Add Product',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+            const SliverToBoxAdapter(child: SizedBox(height: 90)),
+          ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentNavIndex,
-        selectedItemColor: AppColors.primaryDark,
-        unselectedItemColor: AppColors.textSecondary,
-        backgroundColor: Colors.white,
-        type: BottomNavigationBarType.fixed,
-        onTap: (index) {
-          setState(() => _currentNavIndex = index);
-          if (index == 1) {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const HistoryScreen()),
-            );
-          } else if (index == 2) {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const StatsScreen()),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.spa_outlined),
-            activeIcon: Icon(Icons.spa_rounded),
-            label: 'Vanity',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.recycling_outlined),
-            activeIcon: Icon(Icons.recycling_rounded),
-            label: 'Empties',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.analytics_outlined),
-            activeIcon: Icon(Icons.analytics_rounded),
-            label: 'Budget',
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildSummaryCards(VanityProvider provider) {
-    return Row(
-      children: [
-        // Fresh (>30d)
-        Expanded(
-          child: _buildMetricTile(
-            title: 'Fresh',
-            count: provider.totalActiveCount,
-            color: AppColors.statusGreen,
-            bgColor: AppColors.statusGreenBg,
-            borderColor: AppColors.statusGreenBorder,
-          ),
-        ),
-        const SizedBox(width: 8),
-
-        // Expiring (0-30d)
-        Expanded(
-          child: _buildMetricTile(
-            title: 'Expiring',
-            count: provider.totalExpiringCount,
-            color: AppColors.statusAmber,
-            bgColor: AppColors.statusAmberBg,
-            borderColor: AppColors.statusAmberBorder,
-          ),
-        ),
-        const SizedBox(width: 8),
-
-        // Expired (<0d)
-        Expanded(
-          child: _buildMetricTile(
-            title: 'Expired',
-            count: provider.totalExpiredCount,
-            color: AppColors.statusRed,
-            bgColor: AppColors.statusRedBg,
-            borderColor: AppColors.statusRedBorder,
-          ),
-        ),
-        const SizedBox(width: 8),
-
-        // Unopened
-        Expanded(
-          child: _buildMetricTile(
-            title: 'Unopened',
-            count: provider.totalUnopenedCount,
-            color: AppColors.statusUnopened,
-            bgColor: AppColors.statusUnopenedBg,
-            borderColor: AppColors.statusUnopenedBorder,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetricTile({
+  Widget _buildQuickFilterCard({
     required String title,
-    required int count,
+    required String count,
     required Color color,
     required Color bgColor,
-    required Color borderColor,
+    required bool isSelected,
+    required VoidCallback onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor, width: 1),
-      ),
-      child: Column(
-        children: [
-          Text(
-            count.toString(),
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? bgColor : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? color : const Color(0xFFE2E8F0),
+            width: isSelected ? 1.5 : 1,
           ),
-          const SizedBox(height: 2),
-          Text(
-            title,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: color.withOpacity(0.85),
+        ),
+        child: Column(
+          children: [
+            Text(
+              count,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? color : AppTheme.textMuted,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, VanityProvider provider) {
-    final isFiltering = provider.selectedCategory != null || provider.searchQuery.isNotEmpty;
-
+  Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -378,51 +505,36 @@ class _VanityDashboardScreenState extends State<VanityDashboardScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
-                color: AppColors.primaryLight,
+                color: Color(0xFFFDF2F4),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.inventory_2_outlined,
+                Icons.spa_outlined,
                 size: 48,
-                color: AppColors.primaryDark,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              isFiltering ? 'No matching products' : 'Your Vanity is Empty',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isFiltering
-                  ? 'Try clearing filters or search terms.'
-                  : 'Scan a barcode or add skincare manually to start tracking expiration and PAO.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14,
-                color: AppColors.textSecondary,
+                color: AppTheme.primaryRose,
               ),
             ),
             const SizedBox(height: 20),
-            if (isFiltering)
-              OutlinedButton(
-                onPressed: () {
-                  _searchController.clear();
-                  provider.setSearchQuery('');
-                  provider.setSelectedCategory(null);
-                },
-                child: const Text('Reset Filters'),
-              )
-            else
-              ElevatedButton.icon(
-                onPressed: _openAddProduct,
-                icon: const Icon(Icons.qr_code_scanner, size: 18),
-                label: const Text('Add First Product'),
-              ),
+            const Text(
+              'Your Vanity is Empty',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textDark),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Add your opened serums, creams, and makeup to start tracking expiration dates and avoid duplicate purchases.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: AppTheme.textMuted, height: 1.4),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AddProductScreen()),
+                );
+              },
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add First Product'),
+            ),
           ],
         ),
       ),
