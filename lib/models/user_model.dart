@@ -18,6 +18,9 @@ class UserModel {
     this.emailVerified = true,
   });
 
+  /// True when this is the local mock demo account (no active Firebase session).
+  bool get isDemoAccount => email == 'vanity@demo.app' || userId == 'demo_user';
+
   Map<String, dynamic> toMap() {
     return {
       'user_id': userId,

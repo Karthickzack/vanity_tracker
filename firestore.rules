@@ -39,7 +39,9 @@ service cloud.firestore {
     }
 
     function myEmail() {
-      return request.auth.token.email.lower();
+      return ('email' in request.auth.token && request.auth.token.email != null)
+        ? request.auth.token.email.lower()
+        : '';
     }
 
     // Without verification anyone could register the invitee's address and join.
@@ -53,6 +55,10 @@ service cloud.firestore {
 
     function invitationPath(invitationId) {
       return /databases/$(database)/documents/household_invitations/$(invitationId);
+    }
+
+    function roomCodePath(code) {
+      return /databases/$(database)/documents/household_room_codes/$(code);
     }
 
     function isHouseholdMember(householdId) {
@@ -72,9 +78,18 @@ service cloud.firestore {
     // --- Users: private profile pointer (household_id only) ---
     match /users/{userId} {
       allow read, delete: if isAuthenticated() && uid() == userId;
-      allow create, update: if isAuthenticated() && uid() == userId &&
+      allow create: if isAuthenticated() && uid() == userId &&
         request.resource.data.keys().hasOnly(['household_id']) &&
         (!('household_id' in request.resource.data) || request.resource.data.household_id is string);
+      allow update: if isAuthenticated() && (
+        (uid() == userId &&
+         request.resource.data.keys().hasOnly(['household_id']) &&
+         (!('household_id' in request.resource.data) || request.resource.data.household_id is string)) ||
+        // Household owner removing a member from the room / household
+        (resource.data.get('household_id', '') != '' &&
+         isHouseholdOwner(resource.data.household_id) &&
+         (!('household_id' in request.resource.data) || request.resource.data.household_id == null))
+      );
     }
 
     // --- Vanity Items ---
@@ -127,14 +142,14 @@ service cloud.firestore {
         request.resource.data.created_by == uid() &&
         request.resource.data.member_uids == [uid()] &&
         request.resource.data.member_emails.keys().hasOnly([uid()]) &&
-        request.resource.data.member_emails[uid()] == myEmail();
+        (myEmail() == '' || request.resource.data.member_emails[uid()] is string);
 
       allow update: if isAuthenticated() && (
         // Owner: rename, remove members, or hand ownership to a remaining member.
         // The owner can NOT add anyone (members join only through an invitation).
         (
           resource.data.created_by == uid() &&
-          changedKeys().hasOnly(['name', 'created_by', 'member_uids', 'member_emails']) &&
+          changedKeys().hasOnly(['name', 'created_by', 'member_uids', 'member_emails', 'room_code']) &&
           resource.data.member_uids.hasAll(request.resource.data.member_uids) &&
           resource.data.member_emails.keys().hasAll(request.resource.data.member_emails.keys()) &&
           request.resource.data.created_by in request.resource.data.member_uids
@@ -169,6 +184,20 @@ service cloud.firestore {
           getAfter(invitationPath(request.resource.data.last_join_invitation_id)).data.status == 'accepted' &&
           getAfter(invitationPath(request.resource.data.last_join_invitation_id)).data.household_id == householdId &&
           getAfter(invitationPath(request.resource.data.last_join_invitation_id)).data.invited_email == myEmail()
+        ) ||
+
+        // A user joins with an active room code: adds only themself, verified against household_room_codes.
+        (
+          isAuthenticated() &&
+          !(uid() in resource.data.member_uids) &&
+          changedKeys().hasOnly(['member_uids', 'member_emails', 'last_join_room_code']) &&
+          request.resource.data.member_uids.hasAll(resource.data.member_uids) &&
+          request.resource.data.member_uids.removeAll(resource.data.member_uids).hasOnly([uid()]) &&
+          request.resource.data.member_emails.diff(resource.data.member_emails).affectedKeys().hasOnly([uid()]) &&
+          request.resource.data.member_emails[uid()] == myEmail() &&
+          exists(roomCodePath(request.resource.data.last_join_room_code)) &&
+          get(roomCodePath(request.resource.data.last_join_room_code)).data.household_id == householdId &&
+          get(roomCodePath(request.resource.data.last_join_room_code)).data.is_active == true
         )
       );
 
@@ -283,6 +312,30 @@ service cloud.firestore {
       allow update: if isAuthenticated() &&
         resource.data.user_id == uid() &&
         request.resource.data.user_id == uid();
+    }
+
+    // --- Household Room Codes (Fast Join) ---
+    match /household_room_codes/{roomCode} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.room_code == roomCode &&
+        request.resource.data.is_active is bool &&
+        (
+          request.resource.data.created_by == uid() ||
+          isHouseholdOwner(request.resource.data.household_id) ||
+          (existsAfter(householdPath(request.resource.data.household_id)) &&
+           getAfter(householdPath(request.resource.data.household_id)).data.created_by == uid())
+        );
+      allow update: if isAuthenticated() &&
+        (
+          resource.data.created_by == uid() ||
+          isHouseholdOwner(resource.data.household_id)
+        );
+      allow delete: if isAuthenticated() &&
+        (
+          resource.data.created_by == uid() ||
+          isHouseholdOwner(resource.data.household_id)
+        );
     }
 
     // --- Legacy mail queue: no client access (the invite server sends directly) ---

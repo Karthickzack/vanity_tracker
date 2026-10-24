@@ -34,4 +34,7 @@ app.listen(config.port, config.host, () => {
     : `  Email sender: NOT CONFIGURED (missing ${mailer.missing.join(', ')}) - invitations stay in-app only`);
   console.log(`  Email "Open Vanity Tracker" link: ${config.appUrl ?? 'NONE'}`);
   if (config.appUrlWarning) console.warn(`  WARNING: ${config.appUrlWarning}`);
+  if (config.host === '0.0.0.0') {
+    console.warn('  SECURITY WARNING: Server is listening on 0.0.0.0 (all interfaces). Only use this on a trusted private Wi-Fi network.');
+  }
 });

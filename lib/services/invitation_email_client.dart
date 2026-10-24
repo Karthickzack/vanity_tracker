@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/household_invitation_model.dart';
 
@@ -52,14 +51,11 @@ class BackendInvitationEmailSender implements InvitationEmailSender {
 
   static String _trimSlash(String s) => s.endsWith('/') ? s.substring(0, s.length - 1) : s;
 
-  /// Web talks to the backend on the same laptop. The Android emulator reaches the
-  /// host laptop through 10.0.2.2.
+  /// Defaults to the deployed Vercel server. Override with
+  /// `--dart-define=INVITE_API_BASE_URL=https://your-custom-url`.
   static String defaultBaseUrl() {
     if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8787';
-    }
-    return 'http://localhost:8787';
+    return 'https://vanity-tracker-server.vercel.app';
   }
 
   static Future<String?> _firebaseIdToken() async {
@@ -106,7 +102,7 @@ class BackendInvitationEmailSender implements InvitationEmailSender {
       return InvitationEmailResult(
         status: EmailDeliveryStatus.failed,
         error: 'Could not reach the invitation email server at $baseUrl. '
-            'Start it with "npm start" in the server folder.',
+            'Please verify your network connection or check the server status at /api/health.',
       );
     }
 

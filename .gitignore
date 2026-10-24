@@ -11,6 +11,9 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+.env
+.env.*
+*.env
 
 # IntelliJ related
 *.iml
@@ -46,6 +49,3 @@ app.*.map.json
 
 # Package files
 *.apk
-!vanity-tracker.apk
-
-

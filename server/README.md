@@ -38,7 +38,7 @@ stored invitation and a fixed template.
    notepad .env
    ```
    Set `GMAIL_USER=` to the sending Gmail address and `GMAIL_APP_PASSWORD=` to the App
-   Password. Keep `FIREBASE_PROJECT_ID=vanity-tracker` (the project the web app uses).
+   Password. Keep `FIREBASE_PROJECT_ID=vanitytracker` (the project the web app uses).
    **Never paste the App Password into chat, the Flutter code, or Git.** `.env` is git-ignored.
    Optionally set `APP_URL=` to the **public** address of the web app (e.g.
    `https://your-app.web.app`). Invitation emails then show an **Open Vanity Tracker**
@@ -98,11 +98,22 @@ These use a **mock** mail transport and in-memory Firestore. They prove the auth
 and status logic, not real delivery. Real delivery is verified by sending one invitation to
 a Gmail inbox you control.
 
-## Android note
+## Android & Mobile Testing
 
-The Android build currently uses a **different Firebase project** (`vanitytracker`) from the
-web app (`vanity-tracker`). This server only accepts tokens for `FIREBASE_PROJECT_ID`, so
-Android invitations cannot be emailed until both platforms use the same project. The Android
-emulator reaches this server at `http://10.0.2.2:8787`; a physical phone would need
-`HOST=0.0.0.0`, the laptop's Wi-Fi IP via `--dart-define=INVITE_API_BASE_URL=...`, and
-cleartext HTTP allowed in the Android app – not configured by default.
+Both the Android build and the Web app use the same Firebase project (`vanitytracker`).
+
+- **Android Emulator**: Reaches this server at `http://10.0.2.2:8787` by default without extra configuration.
+- **Physical Phone**:
+  1. In `server/.env`, set `HOST=0.0.0.0` so the server listens on all network interfaces.
+     > **Warning**: Only bind to `0.0.0.0` while connected to a trusted private Wi-Fi network.
+  2. Find your laptop's LAN IP address (e.g. `ipconfig` on Windows -> IPv4 Address, e.g. `192.168.1.50`).
+  3. Start the server:
+     ```powershell
+     cd server
+     npm start
+     ```
+  4. Run Flutter with the laptop's LAN IP:
+     ```powershell
+     flutter run -d <device-id> --dart-define=INVITE_API_BASE_URL=http://<YOUR_LAPTOP_IP>:8787
+     ```
+  5. Cleartext HTTP is permitted for development in debug builds via `android/app/src/debug/res/xml/network_security_config.xml`. Release builds strictly require HTTPS.

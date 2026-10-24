@@ -72,6 +72,8 @@ class CategoryModel {
     return null;
   }
 
+  static CategoryModel findById(String? id) => byId(id) ?? defaultCategories.last;
+
   /// Categories stored in the database merged with the built-in list: stored records win
   /// for ids they define (their names/PAO are kept), built-in ids they lack are added, and
   /// `other` stays last. Nothing is written back.

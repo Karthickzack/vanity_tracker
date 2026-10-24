@@ -269,36 +269,41 @@ class EmptiesScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert, size: 18, color: AppTheme.textMuted),
-                      tooltip: 'Options',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onSelected: (val) async {
-                        if (val == 'restore') {
-                          await context.read<VanityProvider>().restoreFromEmpties(item.vanityItemId);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('✨ Product restored to your active Vanity Shelf!'),
-                                backgroundColor: AppTheme.statusGreen,
-                              ),
-                            );
+                    Semantics(
+                      button: true,
+                      label: 'Restore $name to active vanity',
+                      child: IconButton(
+                        icon: const Icon(Icons.undo_rounded, size: 20, color: AppTheme.primaryRose),
+                        tooltip: 'Restore to Vanity',
+                        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Restore Product'),
+                              content: Text('Restore "$name" back to your active Vanity Shelf?'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.of(ctx).pop(true),
+                                  child: const Text('Restore'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true && context.mounted) {
+                            await context.read<VanityProvider>().restoreFromEmpties(item.vanityItemId);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('✨ Product restored to your active Vanity Shelf!'),
+                                  backgroundColor: AppTheme.statusGreen,
+                                ),
+                              );
+                            }
                           }
-                        }
-                      },
-                      itemBuilder: (ctx) => [
-                        const PopupMenuItem(
-                          value: 'restore',
-                          child: Row(
-                            children: [
-                              Icon(Icons.undo_rounded, size: 16, color: AppTheme.primaryRose),
-                              SizedBox(width: 8),
-                              Text('Restore to Vanity'),
-                            ],
-                          ),
-                        ),
-                      ],
+                        },
+                      ),
                     ),
                   ],
                 ),

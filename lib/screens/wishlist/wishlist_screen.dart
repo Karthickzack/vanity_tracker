@@ -319,18 +319,51 @@ class _WishlistScreenState extends State<WishlistScreen> {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_horiz_rounded, color: AppTheme.textMuted),
-                  onSelected: (val) async {
-                    if (val == 'edit') {
-                      _showAddEditWishlistDialog(context, existingItem: item);
-                    } else if (val == 'delete') {
-                      await context.read<WishlistProvider>().deleteItem(item.wishlistId, userId);
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Edit Details')),
-                    PopupMenuItem(value: 'delete', child: Text('Remove from Wishlist', style: TextStyle(color: AppTheme.statusRed))),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Edit ${item.name}',
+                      child: IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 20, color: AppTheme.textMuted),
+                        tooltip: 'Edit details',
+                        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        onPressed: () => _showAddEditWishlistDialog(context, existingItem: item),
+                      ),
+                    ),
+                    Semantics(
+                      button: true,
+                      label: 'Remove ${item.name} from wishlist',
+                      child: IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppTheme.statusRed),
+                        tooltip: 'Remove from wishlist',
+                        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Remove from Wishlist'),
+                              content: Text('Are you sure you want to remove "${item.name}" from your wishlist?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.statusRed),
+                                  onPressed: () => Navigator.of(ctx).pop(true),
+                                  child: const Text('Remove'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true && context.mounted) {
+                            await context.read<WishlistProvider>().deleteItem(item.wishlistId, userId);
+                          }
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ],

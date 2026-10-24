@@ -130,6 +130,9 @@ class VanityItemModel {
     return diff <= 0 ? 1 : diff; // Minimum 1 day
   }
 
+  /// Alias for [daysUsed]
+  int get daysInUse => daysUsed;
+
   /// Cost per day calculation (price / daysUsed)
   double? get costPerDay {
     if (price == null || price! <= 0) return null;

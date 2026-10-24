@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/household_invitation_model.dart';
@@ -69,6 +70,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                       children: [
                         for (final err in [householdProv.errorMessage, householdProv.invitationsError])
                           if (err != null) _buildErrorBanner(err, () => householdProv.loadHousehold(user)),
+                        if (user.isDemoAccount) _buildDemoModeBanner(),
                         if (householdProv.needsEmailVerification) _buildVerifyEmailBanner(context, user),
                         householdProv.hasHousehold
                             ? _buildActiveHouseholdView(context, householdProv, user)
@@ -77,6 +79,43 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                     ),
                   ),
                 ),
+    );
+  }
+
+  /// Banner displayed when using the offline demo account (vanity@demo.app).
+  Widget _buildDemoModeBanner() {
+    return Container(
+      key: const ValueKey('demo-mode-household-banner'),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, color: Color(0xFF2563EB), size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Demo mode: sign in with a real account to send invitation emails',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF1E3A8A)),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Invitations created in demo mode are saved locally. The invitation server requires an authenticated Firebase session to email recipients.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF1E40AF)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -250,6 +289,117 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
           ),
         ),
 
+        // Room Code Card
+        Container(
+          margin: const EdgeInsets.only(top: 14),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE9D5FF)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E8FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.meeting_room_rounded, size: 20, color: Color(0xFF7E22CE)),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Room Code',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textDark),
+                        ),
+                        Text(
+                          'Share code to let others join instantly',
+                          style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (household.roomCode.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F3FF),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFDDD6FE)),
+                      ),
+                      child: Text(
+                        household.roomCode,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
+                          color: Color(0xFF6D28D9),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: household.roomCode.isNotEmpty
+                          ? () {
+                              Clipboard.setData(ClipboardData(text: household.roomCode));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Room code copied to clipboard!'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          : null,
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy Code'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF6D28D9),
+                        side: const BorderSide(color: Color(0xFFDDD6FE)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                  if (isOwner) ...[
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => _confirmRegenerateRoomCode(context, prov, user),
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: const Text('Regenerate'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.textMuted,
+                        side: const BorderSide(color: Color(0xFFE2E8F0)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+
         const SizedBox(height: 20),
 
         // Actions: Invite member & Leave household
@@ -322,16 +472,26 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                   isThisOwner ? 'Owner' : 'Member',
                   style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                 ),
-                trailing: isMe
-                    ? Container(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isMe)
+                      Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
                           color: const Color(0xFFE0F2FE),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text('You', style: TextStyle(fontSize: 11, color: Color(0xFF0369A1))),
-                      )
-                    : null,
+                      ),
+                    if (isOwner && !isMe)
+                      IconButton(
+                        icon: const Icon(Icons.person_remove_rounded, color: AppTheme.statusRed, size: 20),
+                        tooltip: 'Remove member',
+                        onPressed: () => _confirmRemoveMember(context, prov, user, uid, email),
+                      ),
+                  ],
+                ),
               );
             },
           ),
@@ -428,15 +588,33 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: () => _showCreateHouseholdDialog(context, prov, user),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Create a Household'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryRose,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 12,
+                runSpacing: 10,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _showCreateHouseholdDialog(context, prov, user),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Create Household'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryRose,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _showJoinRoomCodeDialog(context, prov, user),
+                    icon: const Icon(Icons.meeting_room_rounded),
+                    label: const Text('Join with Code'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF7E22CE),
+                      side: const BorderSide(color: Color(0xFFD8B4FE)),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -611,8 +789,10 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
         statusBgColor = const Color(0xFFFEF3C7);
         statusTextColor = const Color(0xFFB45309);
         statusIcon = Icons.phonelink_ring_rounded;
-        statusTooltip = 'No email sent (${inv.emailDeliveryError ?? 'email sender not configured'}). '
-            'Recipient can log in with this email to accept in-app.';
+        statusTooltip = user.isDemoAccount
+            ? 'Demo mode: sign in with a real account to send invitation emails. Recipient can log in with this email to accept in-app.'
+            : 'No email sent (${inv.emailDeliveryError ?? 'email sender not configured'}). '
+                'Recipient can log in with this email to accept in-app.';
         break;
     }
     final canResend = inv.invitedByUid == user.userId &&
@@ -824,7 +1004,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
                 final success = await prov.inviteMember(email, user);
                 if (context.mounted) {
                   if (success) {
-                    _showEmailOutcome(context, prov.lastSentInvitation, created: true);
+                    _showEmailOutcome(context, prov.lastSentInvitation, created: true, isDemo: user.isDemoAccount);
                   } else if (prov.errorMessage != null) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Error: ${prov.errorMessage}'), backgroundColor: AppTheme.statusRed),
@@ -846,12 +1026,17 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
     );
   }
 
-  void _showEmailOutcome(BuildContext context, HouseholdInvitationModel? inv, {required bool created}) {
+  void _showEmailOutcome(
+    BuildContext context,
+    HouseholdInvitationModel? inv, {
+    required bool created,
+    bool isDemo = false,
+  }) {
     if (inv == null) return;
     final ok = inv.emailDeliveryStatus == EmailDeliveryStatus.sent;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(invitationEmailOutcomeMessage(inv, created: created)),
+        content: Text(invitationEmailOutcomeMessage(inv, created: created, isDemo: isDemo)),
         backgroundColor: ok ? AppTheme.statusGreen : AppTheme.statusAmber,
         duration: const Duration(seconds: 6),
       ),
@@ -867,7 +1052,7 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
     final updated = await prov.resendInvitationEmail(inv.invitationId, user);
     if (!context.mounted) return;
     if (updated != null) {
-      _showEmailOutcome(context, updated, created: false);
+      _showEmailOutcome(context, updated, created: false, isDemo: user.isDemoAccount);
     } else if (prov.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: ${prov.errorMessage}'), backgroundColor: AppTheme.statusRed),
@@ -925,11 +1110,190 @@ class _HouseholdScreenState extends State<HouseholdScreen> {
       }
     }
   }
-}
+
+  void _showJoinRoomCodeDialog(BuildContext context, HouseholdProvider prov, UserModel user) {
+    final codeController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Join with Room Code'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter the 6-character room code (e.g. VAN-7K9P) provided by the household owner.',
+              style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: codeController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'Room Code',
+                hintText: 'VAN-XXXX',
+                prefixIcon: Icon(Icons.meeting_room_rounded),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryRose),
+            onPressed: () async {
+              final code = codeController.text.trim().toUpperCase();
+              if (code.isEmpty) return;
+              Navigator.of(ctx).pop();
+              try {
+                final success = await prov.joinByRoomCode(code, user);
+                if (context.mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('🎉 Joined "${prov.currentHousehold?.name ?? 'Household'}"!'),
+                        backgroundColor: AppTheme.statusGreen,
+                      ),
+                    );
+                  } else if (prov.errorMessage != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: ${prov.errorMessage}'), backgroundColor: AppTheme.statusRed),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.statusRed),
+                  );
+                }
+              }
+            },
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmRegenerateRoomCode(
+    BuildContext context,
+    HouseholdProvider prov,
+    UserModel owner,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Regenerate Room Code?'),
+        content: const Text(
+          'The current room code will be permanently invalidated. Anyone with the old code will no longer be able to join.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7E22CE)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Regenerate'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final newCode = await prov.regenerateRoomCode(owner);
+        if (context.mounted) {
+          if (newCode != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('New room code generated: $newCode'),
+                backgroundColor: AppTheme.statusGreen,
+              ),
+            );
+          } else if (prov.errorMessage != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: ${prov.errorMessage}'), backgroundColor: AppTheme.statusRed),
+            );
+          }
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.statusRed),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _confirmRemoveMember(
+    BuildContext context,
+    HouseholdProvider prov,
+    UserModel owner,
+    String memberUid,
+    String email,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Remove Member?'),
+        content: Text(
+          'Are you sure you want to remove $email from this household? '
+          'Their shared items will be immediately unshared and their access will be revoked.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.statusRed),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final success = await prov.removeMember(memberUid, owner);
+        if (context.mounted) {
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$email has been removed from the household.'),
+                backgroundColor: AppTheme.statusAmber,
+              ),
+            );
+          } else if (prov.errorMessage != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: ${prov.errorMessage}'), backgroundColor: AppTheme.statusRed),
+            );
+          }
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.statusRed),
+          );
+        }
+      }
+    }
+  }
+  }
 
 /// Snackbar text derived from the real delivery outcome, never from the Firestore write alone.
-String invitationEmailOutcomeMessage(HouseholdInvitationModel inv, {required bool created}) {
+String invitationEmailOutcomeMessage(
+  HouseholdInvitationModel inv, {
+  required bool created,
+  bool isDemo = false,
+}) {
   final prefix = created ? 'Invitation saved for ${inv.invitedEmail}. ' : '';
+  if (isDemo) {
+    return '${prefix}Demo mode: sign in with a real account to send invitation emails. Recipient can still accept in-app.';
+  }
   switch (inv.emailDeliveryStatus) {
     case EmailDeliveryStatus.sent:
       return '${prefix}Email sent: Gmail accepted it for delivery. Ask them to check Inbox and Spam.';

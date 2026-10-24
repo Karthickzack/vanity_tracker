@@ -143,10 +143,32 @@ lib/
    - Add your `GoogleService-Info.plist` to `ios/Runner/`.
    *Note: If no Firebase config is present, the app gracefully defaults to offline local mode.*
 
-4. **Run the application:**
+4. **Run the invitation email backend (optional, for email delivery):**
    ```bash
-   flutter run
+   cd server
+   npm install
+   # Copy template to .env and configure GMAIL_USER and GMAIL_APP_PASSWORD
+   cp .env.example .env
+   npm start
    ```
+
+5. **Run the application:**
+   - **Chrome / Web:**
+     ```bash
+     flutter run -d chrome
+     ```
+   - **Android Emulator:**
+     ```bash
+     flutter run -d emulator-id
+     ```
+     *(Default invitation server address http://10.0.2.2:8787 connects automatically to laptop localhost:8787)*
+   - **Physical Android Phone:**
+     1. Set `HOST=0.0.0.0` in `server/.env` (on trusted private Wi-Fi).
+     2. Start the email server: `cd server && npm start`.
+     3. Run the app with your laptop's local LAN IP:
+        ```bash
+        flutter run -d <device-id> --dart-define=INVITE_API_BASE_URL=http://<YOUR_LAPTOP_LAN_IP>:8787
+        ```
 
 ---
 

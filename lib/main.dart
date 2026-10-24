@@ -30,12 +30,28 @@ void main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      debugPrint('Firebase initialized successfully for Web.');
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        await Firebase.initializeApp();
+        debugPrint('Firebase initialized natively via google-services.json for Android.');
+      } catch (nativeErr) {
+        debugPrint('Firebase native Android init note ($nativeErr); retrying with DefaultFirebaseOptions...');
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.android,
+        );
+        debugPrint('Firebase initialized successfully via DefaultFirebaseOptions for Android.');
+      }
     } else {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      debugPrint('Firebase initialized successfully for $defaultTargetPlatform.');
     }
-  } catch (e) {
+  } catch (e, stack) {
     debugPrint(
-      'Firebase not initialized via default options, running with local persistence: $e',
+      'WARNING: Firebase initialization failed ($e). Operating in local persistence mode.\n'
+      'Reason: $e\nStack: $stack',
     );
   }
 
